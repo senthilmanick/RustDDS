@@ -36,14 +36,14 @@ use crate::{
     discovery_db::DiscoveryDB,
     sedp_messages::DiscoveredTopicData,
   },
-  network::{constant::*, udp_listener::UDPListener},
+  network::{constant::*, udp_listener::UDPListener, util::default_ip_addr},
   rtps::{
     constant::*,
     dp_event_loop::{DPEventLoop, DomainInfo, EventLoopCommand},
     reader::*,
     writer::WriterIngredients,
-  },
-  structure::{dds_cache::DDSCache, entity::RTPSEntity, guid::*, locator::Locator},
+  }, 
+  structure::{dds_cache::DDSCache, entity::RTPSEntity, guid::*, locator::Locator}, 
   StatusEvented,
 };
 #[cfg(feature = "security")]
@@ -276,6 +276,7 @@ impl DomainParticipantBuilder {
       Ok(Ok(())) => {
         // normal case
         info!("Discovery started. Participant constructed.");
+        info!("Using ip addr: {}", default_ip_addr());
         Ok(dp)
       }
       Ok(Err(e)) => {
@@ -994,7 +995,7 @@ impl DomainParticipantInner {
     let mut listeners = HashMap::new();
 
     match UDPListener::new_multicast(
-      "0.0.0.0",
+      default_ip_addr().as_str(),
       spdp_well_known_multicast_port(domain_id),
       Ipv4Addr::new(239, 255, 0, 1),
     ) {
@@ -1012,7 +1013,7 @@ impl DomainParticipantInner {
     // Numbers"
     while discovery_listener.is_none() && participant_id < 120 {
       discovery_listener = UDPListener::new_unicast(
-        "0.0.0.0",
+        default_ip_addr().as_str(),
         spdp_well_known_unicast_port(domain_id, participant_id),
       )
       .ok();
@@ -1033,7 +1034,7 @@ impl DomainParticipantInner {
     // Now the user traffic listeners
 
     match UDPListener::new_multicast(
-      "0.0.0.0",
+      default_ip_addr().as_str(),
       user_traffic_multicast_port(domain_id),
       Ipv4Addr::new(239, 255, 0, 1),
     ) {
@@ -1044,14 +1045,14 @@ impl DomainParticipantInner {
     }
 
     let user_traffic_listener = UDPListener::new_unicast(
-      "0.0.0.0",
+      default_ip_addr().as_str(),
       user_traffic_unicast_port(domain_id, participant_id),
     )
     .or_else(|e| {
       if matches!(e.kind(), ErrorKind::AddrInUse) {
         // If we do not get the preferred listening port,
         // try again, with "any" port number.
-        UDPListener::new_unicast("0.0.0.0", 0).or_else(|e| {
+        UDPListener::new_unicast(default_ip_addr().as_str(), 0).or_else(|e| {
           create_error_out_of_resources!(
             "Could not open unicast user traffic listener, any port number: {:?}",
             e

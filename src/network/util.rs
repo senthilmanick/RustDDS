@@ -1,12 +1,18 @@
 use std::{
   io,
   net::{IpAddr, SocketAddr},
+  env
 };
 
 use log::error;
 use pnet::datalink::NetworkInterface;
 
 use crate::structure::locator::Locator;
+
+pub fn default_ip_addr () -> String {
+  let value: String = env::var("DEFAULT_DDS_INTERFACE_IP").unwrap_or_else(|_| "0.0.0.0".to_string());
+  return value;
+}
 
 pub fn get_local_multicast_locators(port: u16) -> Vec<Locator> {
   let saddr = SocketAddr::new("239.255.0.1".parse().unwrap(), port);

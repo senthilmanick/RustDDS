@@ -11,7 +11,7 @@ use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 #[cfg(windows)]
 use local_ip_address::list_afinet_netifas;
 
-use crate::{network::util::get_local_multicast_ip_addrs, structure::locator::Locator};
+use crate::{network::util::{default_ip_addr, get_local_multicast_ip_addrs}, structure::locator::Locator};
 
 // We need one multicast sender socket per interface
 
@@ -24,7 +24,7 @@ pub struct UDPSender {
 impl UDPSender {
   pub fn new(sender_port: u16) -> io::Result<Self> {
     let unicast_socket = {
-      let saddr: SocketAddr = SocketAddr::new("0.0.0.0".parse().unwrap(), sender_port);
+      let saddr: SocketAddr = SocketAddr::new(default_ip_addr().as_str().parse().unwrap(), sender_port);
       mio_08::net::UdpSocket::bind(saddr)?
     };
 

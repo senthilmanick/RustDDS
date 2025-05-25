@@ -2,12 +2,20 @@ use std::{
   marker::PhantomData,
   pin::Pin,
   sync::{
-    atomic::{AtomicI64, Ordering},
+    atomic::Ordering,
     Arc, Mutex,
   },
   task::{Context, Poll, Waker},
   time::{Duration, Instant},
 };
+
+cfg_if::cfg_if! {
+  if #[cfg(target_has_atomic = "64")] {
+    use std::sync::atomic::AtomicI64;
+  } else {
+    use std::sync::atomic::AtomicI32;
+  }
+}
 
 use futures::{Future, Stream};
 use mio_06::{Events, PollOpt, Ready, Token};
@@ -127,6 +135,8 @@ impl From<Option<Timestamp>> for WriteOptions {
 /// Simplified type for CDR encoding
 pub type DataWriterCdr<D> = DataWriter<D, CDRSerializerAdapter<D>>;
 
+cfg_if::cfg_if! {
+if #[cfg(target_has_atomic = "64")] {
 /// DDS DataWriter for keyed topics
 ///
 /// # Examples
@@ -167,6 +177,22 @@ pub struct DataWriter<D: Keyed, SA: SerializerAdapter<D> = CDRSerializerAdapter<
   discovery_command: mio_channel::SyncSender<DiscoveryCommand>,
   status_receiver: StatusChannelReceiver<DataWriterStatus>,
   available_sequence_number: AtomicI64,
+}
+} else {
+pub struct DataWriter<D: Keyed, SA: SerializerAdapter<D> = CDRSerializerAdapter<D>> {
+  data_phantom: PhantomData<D>,
+  ser_phantom: PhantomData<SA>,
+  my_publisher: Publisher,
+  my_topic: Topic,
+  qos_policy: QosPolicies,
+  my_guid: GUID,
+  cc_upload: mio_channel::SyncSender<WriterCommand>,
+  cc_upload_waker: Arc<Mutex<Option<Waker>>>,
+  discovery_command: mio_channel::SyncSender<DiscoveryCommand>,
+  status_receiver: StatusChannelReceiver<DataWriterStatus>,
+  available_sequence_number: AtomicI32,
+}
+}
 }
 
 impl<D, SA> Drop for DataWriter<D, SA>
@@ -221,6 +247,9 @@ where
         }
       }
     };
+
+cfg_if::cfg_if! {
+  if #[cfg(target_has_atomic = "64")] {   
     Ok(Self {
       data_phantom: PhantomData,
       ser_phantom: PhantomData,
@@ -234,8 +263,23 @@ where
       status_receiver,
       available_sequence_number: AtomicI64::new(1), // valid numbering starts from 1
     })
+    } else {
+    Ok(Self {
+      data_phantom: PhantomData,
+      ser_phantom: PhantomData,
+      my_publisher: publisher,
+      my_topic: topic,
+      qos_policy: qos,
+      my_guid: guid,
+      cc_upload,
+      cc_upload_waker,
+      discovery_command,
+      status_receiver,
+      available_sequence_number: AtomicI32::new(1), // valid numbering starts from 1
+    })
+    }
+    }
   }
-
   fn next_sequence_number(&self) -> SequenceNumber {
     SequenceNumber::from(
       self
